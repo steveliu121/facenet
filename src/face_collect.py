@@ -39,7 +39,12 @@ import facenet
 import align.detect_face
 
 def main(args):
+    '''
+    采集输入人脸信息,生成标签和特征
+    采用字典存储标签名字和特征向量至数据库文件"face_database.npy"
+    '''
 
+    #读取图片文件,采用MTCNN对图片数据进行人脸检测,生成相应大小的人脸数据
     images = load_and_align_data(args.image_files, args.image_size, args.margin, args.gpu_memory_fraction)
     with tf.Graph().as_default():
 
@@ -57,25 +62,20 @@ def main(args):
             feed_dict = { images_placeholder: images, phase_train_placeholder:False }
             emb = sess.run(embeddings, feed_dict=feed_dict)
 
-            nrof_images = len(args.image_files)
 
-            print('Images:')
-            for i in range(nrof_images):
-                print('%1d: %s' % (i, args.image_files[i]))
-            print('')
+            #获取标签
+            label = []
+            for image_file in args.image_files:
+                base_name = os.path.basename(image_file)
+                label.append(os.path.splitext(base_name)[0])
 
-            # Print distance matrix
-            print('Distance matrix')
-            print('    ', end='')
-            for i in range(nrof_images):
-                print('    %1d     ' % i, end='')
-            print('')
-            for i in range(nrof_images):
-                print('%1d  ' % i, end='')
-                for j in range(nrof_images):
-                    dist = np.sqrt(np.sum(np.square(np.subtract(emb[i,:], emb[j,:]))))
-                    print('  %1.4f  ' % dist, end='')
-                print('')
+            #生成人脸数据库,采用字典存储
+            face_database = {}
+            i = 0
+            for lb in label:
+                face_database[lb] = emb[i, :]
+                i += 1
+            np.save(os.path.join(args.output_dir, "face_database.npy"), face_database)
 
 
 def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
@@ -93,6 +93,7 @@ def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
 
     tmp_image_paths=copy.copy(image_paths)
     img_list = []
+    print(tmp_image_paths)
     for image in tmp_image_paths:
         img = imageio.imread(os.path.expanduser(image), pilmode='RGB')
         #caution: image channel order must be 'RGB'
@@ -123,6 +124,8 @@ def parse_arguments(argv):
 
     parser.add_argument('--model', type=str,
         help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
+    parser.add_argument('--output_dir', type=str,
+        help='This directory stores face database')
     parser.add_argument('--image_files', type=str, nargs='+', help='Images to compare')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
@@ -130,6 +133,8 @@ def parse_arguments(argv):
         help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+    print('Example:')
+    print('python src/face_collect.py --model pretrained_model/20180402-114759/20180402-114759.pb --image_files ./src/images/host_faces/*.jpg --output_dir ./src/face_database')
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
